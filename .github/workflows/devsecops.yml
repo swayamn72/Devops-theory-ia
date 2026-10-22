@@ -28,7 +28,7 @@ jobs:
 
       # Stage 1: scan source repo (dependencies, secrets, Dockerfile/IaC misconfig)
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -44,7 +44,7 @@ jobs:
 
       # Stage 2: scan the built image (OS packages + app libraries) - The Security Gate
       - name: Trivy image scan (gate - fail on HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: demo-app:${{ github.sha }}
           severity: HIGH,CRITICAL
@@ -55,7 +55,7 @@ jobs:
       # Stage 3: always publish a report, even when the gate fails
       - name: Trivy image scan (SARIF report)
         if: always() && steps.docker_build.outcome == 'success'
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: demo-app:${{ github.sha }}
           format: sarif
@@ -72,7 +72,7 @@ jobs:
 
       - name: Generate SBOM (CycloneDX)
         if: always() && steps.docker_build.outcome == 'success'
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: demo-app:${{ github.sha }}
           format: cyclonedx

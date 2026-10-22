@@ -1,5 +1,0 @@
-__pycache__/
-*.pyc
-sbom.cdx.json
-trivy-results.sarif
-*.zip

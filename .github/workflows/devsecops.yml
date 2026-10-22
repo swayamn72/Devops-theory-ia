@@ -1,0 +1,97 @@
+name: DevSecOps pipeline (Trivy)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write   # needed to upload SARIF to the Security tab
+
+jobs:
+  build-test-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps and run unit tests
+        run: |
+          pip install -r requirements.txt
+          python -m pytest -q
+
+      # Stage 1: scan source repo (dependencies, secrets, Dockerfile/IaC misconfig)
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+          format: table
+
+      - name: Build Docker image
+        id: docker_build
+        run: docker build -t demo-app:${{ github.sha }} .
+
+      # Stage 2: scan the built image (OS packages + app libraries) - The Security Gate
+      - name: Trivy image scan (gate - fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: demo-app:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      # Stage 3: always publish a report, even when the gate fails
+      - name: Trivy image scan (SARIF report)
+        if: always() && steps.docker_build.outcome == 'success'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: demo-app:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always() && steps.docker_build.outcome == 'success'
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true  # Gracefully handles private repositories without GitHub Advanced Security
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Generate SBOM (CycloneDX)
+        if: always() && steps.docker_build.outcome == 'success'
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: demo-app:${{ github.sha }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          exit-code: "0"
+
+      - name: Upload reports as artifacts
+        if: always() && steps.docker_build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            trivy-results.sarif
+            sbom.cdx.json
+
+  deploy:
+    needs: build-test-scan          # only runs if the security gate passed
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy (placeholder)
+        run: echo "Image passed the Trivy gate - deploying to staging..."

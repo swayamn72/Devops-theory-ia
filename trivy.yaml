@@ -1,0 +1,5 @@
+# Optional Trivy config (used with: trivy --config trivy.yaml ...)
+severity:
+  - HIGH
+  - CRITICAL
+ignore-unfixed: true
